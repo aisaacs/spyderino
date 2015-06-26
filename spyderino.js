@@ -12,15 +12,29 @@ var Spyderino = function(options){
 		maxConnections: 10,
 		requestTimeout: 10000,
 		visitedLog: null,
-		headers: {}
+		headers: {},
+		maxDepth: null,
+
+		//An itemizer is a function that give a cheerio object
+		//returns a set of cheerio objects representing the items
+		//which will then be parsed for each field.
+		//If no itemizer is present, the whole page is considered a single item
+		itemizer: null
 	}, options);
 
 	this.filters = [];
+	this.itemizers = [];
 	this.parsers = {};
 	this.uniques = {};
 	this.queued = [];
 	this.base = null;
 	this.stopped = false;
+
+	if (this.options.parsers) {
+		for (var name in this.options.parsers) {
+			this.parseField(name, this.options.parsers[name]);
+		}
+	}
 
 	this.filters.push(this._baseFilter);
 	this.activeRequests = 0;
@@ -35,7 +49,7 @@ _.extend( Spyderino.prototype, {
 		this.queued = [];
 		var parsedUrl = require('url').parse(this.options.entryPoint);
 		this.base = parsedUrl.hostname;
-		this._getPage(this.options.entryPoint);
+		this._getPage(this.options.entryPoint, 0);
 		if (this.options.visitedLog)
 			this.visitedLog = fs.createWriteStream(this.options.visitedLog);
 	},
@@ -43,6 +57,12 @@ _.extend( Spyderino.prototype, {
 	stop: function() {
 		this.stopped = true;
 	},
+
+	restart: function() {
+		this.stopped = false;
+		this._requestComplete();
+	},
+
 
 	parseField: function(field, parser){
 		this.parsers[field] = parser;
@@ -60,7 +80,7 @@ _.extend( Spyderino.prototype, {
 		};
 	},
 
-	_getPage: function(url){
+	_getPage: function(url, depth){
 		if (this.stopped) return;
 		this.activeRequests ++;
 		var options = {
@@ -83,23 +103,34 @@ _.extend( Spyderino.prototype, {
 
 			this._beforeFilter($);
 
-			//extract the links,
-			var links = this._extractLinks($);
-			//filter the links
-			links = this._filterLinks(links);
-			//queue them
-			this._addToQueue(links);
-
-			//parse the doc
-			var result = {};
-			for (var field in this.parsers){
-				var parser = this.parsers[field];
-				result[field] = parser({url: url}, $);
+			if (depth < this.options.maxDepth) {
+				//extract the links,
+				var links = this._extractLinks($);
+				links = this._filterLinks(links);
+				this._addToQueue(links);
 			}
-			//emit the result
-			this.emit('item', result);
 
-			if (this.stopped) return;
+			var items = [];
+
+			if (this.options.itemizer) {
+				var allItems = this.options.itemizer($).each(function(i, el){
+					items.push(el);
+				});
+			} else {
+				items = [$];
+			}
+
+			items.forEach(function(item) {
+				item = cheerio.load(item);
+				var result = {};
+				for (var field in this.parsers){
+					var parser = this.parsers[field];
+					result[field] = parser({url: url}, item);
+				}
+				//emit the result
+				this.emit('item', result);
+			}.bind(this));
+
 			//fill any empty connections
 			this.activeRequests --;
 			this._requestComplete();
@@ -132,15 +163,16 @@ _.extend( Spyderino.prototype, {
 		return links;
 	},
 
-	_addToQueue: function(links){
+	_addToQueue: function(links, depth){
 		links.forEach(function(link){
 
 			var nl = this._normalizeUrl(link);
-
-			var key = require('crypto').createHash('md5').update(nl).digest('hex');
-			if (!this.uniques[key]){
-				this.uniques[key] = true;
-				this.queued.push(nl);
+			if (nl) {
+				var key = require('crypto').createHash('md5').update(nl).digest('hex');
+				if (!this.uniques[key]){
+					this.uniques[key] = true;
+					this.queued.push({url: nl, depth: depth});
+				}
 			}
 		}.bind(this));
 	},
@@ -162,13 +194,12 @@ _.extend( Spyderino.prototype, {
 		if (this.stopped) return;
 
 		while (this.activeRequests < this.options.maxConnections && this.queued.length > 0){
-			var url = this.queued.shift();
-			this._getPage(url);
+			var el = this.queued.shift();
+			this._getPage(el.url, el.depth);
 		}
 
 		if (this.activeRequests === 0 && this.queued.length === 0){
 			this.emit('complete');
-			console.log('Completed');
 		}
 	},
 
@@ -176,6 +207,11 @@ _.extend( Spyderino.prototype, {
 
 		var parser = require('node-url-utils');
 		var parsed = parser.parse(url);
+
+		if (!parsed) {
+			console.error('Error parsing url', url);
+			return null;
+		}
 
 		if (!parsed.host){
 			parsed.protocol = 'http';
