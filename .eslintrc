@@ -5,7 +5,6 @@
     "blockBindings": false,
     "generators": false
   },
-  // To give you an idea how to override rule options:
   "rules": {
     "strict": 0,
     "no-underscore-dangle": 0,

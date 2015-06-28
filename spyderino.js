@@ -14,29 +14,39 @@ var Spyderino = function(options){
 		visitedLog: null,
 		headers: {},
 		maxDepth: null,
+		constrainToDomain: true,
+		beforeFilter: null,
 
 		//An itemizer is a function that give a cheerio object
 		//returns a set of cheerio objects representing the items
 		//which will then be parsed for each field.
 		//If no itemizer is present, the whole page is considered a single item
-		itemizer: null
+		itemizer: null,
+
+		//Cropper constrains page operations to a specific container
+		cropper: null
 	}, options);
 
 	this.filters = [];
 	this.itemizers = [];
-	this.parsers = {};
+	this.itemProps = {};
+	this.required = {};
 	this.uniques = {};
 	this.queued = [];
 	this.base = null;
 	this.stopped = false;
 
-	if (this.options.parsers) {
-		for (var name in this.options.parsers) {
-			this.parseField(name, this.options.parsers[name]);
+	if (this.options.itemProps) {
+		for (var name in this.options.itemProps) {
+			this.addField(name, this.options.itemProps[name]);
 		}
 	}
 
-	this.filters.push(this._baseFilter);
+	if (this.options.filters) {
+		this.options.filters.forEach(function(filter){
+			this.filters.push(filter);
+		}.bind(this));
+	}
 	this.activeRequests = 0;
 };
 
@@ -64,8 +74,8 @@ _.extend( Spyderino.prototype, {
 	},
 
 
-	parseField: function(field, parser){
-		this.parsers[field] = parser;
+	addField: function(field, parser){
+		this.itemProps[field] = parser;
 	},
 
 	addFilter: function(filter){
@@ -98,37 +108,55 @@ _.extend( Spyderino.prototype, {
 			if (this.visitedLog) this.visitedLog.write(url + '\n');
 
 			var $ = cheerio.load(body);
+			var page = $;
 
 			this.emit('page', {url: url, body: body});
 
 			this._beforeFilter($);
 
-			if (depth < this.options.maxDepth) {
-				//extract the links,
-				var links = this._extractLinks($);
-				links = this._filterLinks(links);
-				this._addToQueue(links);
+			if (this.options.cropper) {
+				var el = this.options.cropper($);
+				if (el) {
+					$ = cheerio.load(el);
+				}
 			}
 
-			var items = [];
+			if (this.options.maxDepth && depth < this.options.maxDepth) {
+				//extract the links,
+				var links = this._extractLinks($);
+				links = this._filterLinks(links, url);
+				this._addToQueue(links, depth + 1);
+			}
+
+			var items = [$];
 
 			if (this.options.itemizer) {
 				var allItems = this.options.itemizer($).each(function(i, el){
-					items.push(el);
+					items.push(cheerio.load(el));
 				});
-			} else {
-				items = [$];
 			}
 
 			items.forEach(function(item) {
-				item = cheerio.load(item);
+				item = item;
+
+				var valid = true;
+
 				var result = {};
-				for (var field in this.parsers){
-					var parser = this.parsers[field];
-					result[field] = parser({url: url}, item);
+				for (var field in this.itemProps){
+					var parser = this.itemProps[field].parser;
+					var fieldValue = parser({url: url, $: page}, item);
+					if (fieldValue) {
+						result[field] = fieldValue;
+					} else {
+						if (this.itemProps[field].required) {
+							valid = false;
+						}
+					}
 				}
 				//emit the result
-				this.emit('item', result);
+				if (valid && Object.keys(result).length > 0) {
+					this.emit('item', result, $);
+				}
 			}.bind(this));
 
 			//fill any empty connections
@@ -144,19 +172,31 @@ _.extend( Spyderino.prototype, {
 	},
 
 	_extractLinks: function($){
-		var links = _.toArray($('a')).map( function(link) { return $(link).attr('href'); });
+		var links = _.toArray($('a'))
+			.map(function(link) {
+				return $(link).attr('href');
+			})
+			.filter(function(link) {
+				return typeof link  !== 'undefined';
+			})
+			.map(function(link) {
+				return this._normalizeUrl(link);
+			}.bind(this));
 
 		return links;
 	},
 
-	_filterLinks: function(links){
+	_filterLinks: function(links, url){
 
 		links = links.filter(function(link){
-			var keep = true;
+			var keep = false;
 			this.filters.forEach(function(filter){
-				var result = filter.apply(this, [link]);
-				if (!result) keep = false;
+				keep = keep || filter.apply(this, [link, url]);
 			}.bind(this));
+
+			if (this.options.constrainToDomain) {
+				keep = keep && this._baseFilter(link);
+			}
 
 			return keep;
 		}.bind(this));
