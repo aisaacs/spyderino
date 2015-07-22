@@ -105,7 +105,7 @@ _.extend( Spyderino.prototype, {
 			}
 			if (this.stopped) return;
 
-			var finalUrl    = resp.request.uri.href;
+			var finalUrl = resp.request.uri.href;
 
 			if (this.visitedLog) this.visitedLog.write(finalUrl + '\n');
 
