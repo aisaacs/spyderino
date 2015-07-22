@@ -123,7 +123,7 @@ _.extend( Spyderino.prototype, {
 
 			if (this.options.maxDepth && depth < this.options.maxDepth) {
 				//extract the links,
-				var links = this._extractLinks($);
+				var links = this._extractLinks($, url);
 				links = this._filterLinks(links, url);
 				this._addToQueue(links, depth + 1);
 			}
@@ -171,7 +171,7 @@ _.extend( Spyderino.prototype, {
 		}
 	},
 
-	_extractLinks: function($){
+	_extractLinks: function($, url){
 		var links = _.toArray($('a'))
 			.map(function(link) {
 				return $(link).attr('href');
@@ -180,7 +180,7 @@ _.extend( Spyderino.prototype, {
 				return typeof link  !== 'undefined';
 			})
 			.map(function(link) {
-				return this._normalizeUrl(link);
+				return this._normalizeUrl(link, url);
 			}.bind(this));
 
 		return links;
@@ -205,14 +205,10 @@ _.extend( Spyderino.prototype, {
 
 	_addToQueue: function(links, depth){
 		links.forEach(function(link){
-
-			var nl = this._normalizeUrl(link);
-			if (nl) {
-				var key = require('crypto').createHash('md5').update(nl).digest('hex');
-				if (!this.uniques[key]){
-					this.uniques[key] = true;
-					this.queued.push({url: nl, depth: depth});
-				}
+			var key = require('crypto').createHash('md5').update(link).digest('hex');
+			if (!this.uniques[key]){
+				this.uniques[key] = true;
+				this.queued.push({url: link, depth: depth});
 			}
 		}.bind(this));
 	},
@@ -243,7 +239,7 @@ _.extend( Spyderino.prototype, {
 		}
 	},
 
-	_normalizeUrl: function(url){
+	_normalizeUrl: function(url, parentUrl){
 
 		var parser = require('node-url-utils');
 		var parsed = parser.parse(url);
@@ -254,9 +250,11 @@ _.extend( Spyderino.prototype, {
 		}
 
 		if (!parsed.host){
-			parsed.protocol = 'http';
-			parsed.host = this.base;
-			parsed.hostname = this.base;
+			var parsedParentUrl = parser.parse(parentUrl);
+
+			parsed.protocol = parsedParentUrl.protocol;
+			parsed.host     = parsedParentUrl.host;
+			parsed.hostname = parsedParentUrl.hostname;
 		}
 
 		parsed.hash = null;
