@@ -105,12 +105,14 @@ _.extend( Spyderino.prototype, {
 			}
 			if (this.stopped) return;
 
-			if (this.visitedLog) this.visitedLog.write(url + '\n');
+			var finalUrl    = resp.request.uri.href;
+
+			if (this.visitedLog) this.visitedLog.write(finalUrl + '\n');
 
 			var $ = cheerio.load(body);
 			var page = $;
 
-			this.emit('page', {url: url, body: body});
+			this.emit('page', {url: finalUrl, body: body});
 
 			this._beforeFilter($);
 
@@ -123,8 +125,8 @@ _.extend( Spyderino.prototype, {
 
 			if (this.options.maxDepth && depth < this.options.maxDepth) {
 				//extract the links,
-				var links = this._extractLinks($, url);
-				links = this._filterLinks(links, url);
+				var links = this._extractLinks($, finalUrl);
+				links = this._filterLinks(links, finalUrl);
 				this._addToQueue(links, depth + 1);
 			}
 
@@ -144,7 +146,7 @@ _.extend( Spyderino.prototype, {
 				var result = {};
 				for (var field in this.itemProps){
 					var parser = this.itemProps[field].parser;
-					var fieldValue = parser({url: url, $: page}, item);
+					var fieldValue = parser({url: finalUrl, $: page}, item);
 					if (fieldValue) {
 						result[field] = fieldValue;
 					} else {
