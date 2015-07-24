@@ -4,6 +4,7 @@ var request = require('request');
 var util = require('util');
 var EE = require('events').EventEmitter;
 var cheerio = require('cheerio');
+var robots = require('robots');
 
 var Spyderino = function(options){
 
@@ -16,6 +17,7 @@ var Spyderino = function(options){
 		maxDepth: null,
 		constrainToDomain: true,
 		beforeFilter: null,
+		userAgent: 'Spyderino/0.1',
 
 		//An itemizer is a function that give a cheerio object
 		//returns a set of cheerio objects representing the items
@@ -55,13 +57,27 @@ util.inherits(Spyderino, EE);
 _.extend( Spyderino.prototype, {
 
 	start: function(){
+		console.log('Starting Spyderino ( UA: ', this.options.userAgent, ')');
 		this.uniques = {};
 		this.queued = [];
 		var parsedUrl = require('url').parse(this.options.entryPoint);
 		this.base = parsedUrl.hostname;
-		this._getPage(this.options.entryPoint, 0);
-		if (this.options.visitedLog)
-			this.visitedLog = fs.createWriteStream(this.options.visitedLog);
+
+		//get robots
+		var parser = new robots.RobotsParser();
+		parser.setUrl(parsedUrl.protocol + '//' + parsedUrl.hostname + '/robots.txt', function(parser, success) {
+			if (success) {
+				console.log('Using robots.txt');
+				var userAgent = this.options.userAgent;
+				this._robotsFilter = function(url) {
+					return parser.canFetchSync(userAgent, url);
+				};
+			}
+
+			this._getPage(this.options.entryPoint, 0);
+			if (this.options.visitedLog)
+				this.visitedLog = fs.createWriteStream(this.options.visitedLog);
+		}.bind(this));
 	},
 
 	stop: function() {
@@ -92,6 +108,7 @@ _.extend( Spyderino.prototype, {
 	_getPage: function(url, depth){
 		if (this.stopped) return;
 		this.activeRequests ++;
+		this.options.headers['User-Agent'] = this.options.userAgent;
 		var options = {
 			url : url,
 			headers: this.options.headers
@@ -198,6 +215,10 @@ _.extend( Spyderino.prototype, {
 
 			if (this.options.constrainToDomain) {
 				keep = keep && this._baseFilter(link);
+			}
+
+			if (this._robotsFilter) {
+				keep = keep && this._robotsFilter(url);
 			}
 			return keep;
 		}.bind(this));
