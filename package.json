@@ -1,6 +1,6 @@
 {
   "name": "spyderino",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "A Web Crawler",
   "main": "spyderino.js",
   "scripts": {
