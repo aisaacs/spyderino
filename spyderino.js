@@ -73,7 +73,6 @@ _.extend( Spyderino.prototype, {
 		this._requestComplete();
 	},
 
-
 	addField: function(field, parser){
 		this.itemProps[field] = parser;
 	},
@@ -117,7 +116,7 @@ _.extend( Spyderino.prototype, {
 			this._beforeFilter($);
 
 			if (this.options.cropper) {
-				var el = this.options.cropper($);
+				var el = this.options.cropper($).html();
 				if (el) {
 					$ = cheerio.load(el);
 				}
@@ -133,13 +132,13 @@ _.extend( Spyderino.prototype, {
 			var items = [$];
 
 			if (this.options.itemizer) {
+				items = [];
 				var allItems = this.options.itemizer($).each(function(i, el){
-					items.push(cheerio.load(el));
+					items.push(cheerio.load($(el).html()));
 				});
 			}
 
 			items.forEach(function(item) {
-				item = item;
 
 				var valid = true;
 
@@ -191,7 +190,8 @@ _.extend( Spyderino.prototype, {
 	_filterLinks: function(links, url){
 
 		links = links.filter(function(link){
-			var keep = false;
+
+			var keep = (this.filters.length === 0);
 			this.filters.forEach(function(filter){
 				keep = keep || filter.apply(this, [link, url]);
 			}.bind(this));
@@ -199,7 +199,6 @@ _.extend( Spyderino.prototype, {
 			if (this.options.constrainToDomain) {
 				keep = keep && this._baseFilter(link);
 			}
-
 			return keep;
 		}.bind(this));
 		return links;
