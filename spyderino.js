@@ -5,7 +5,7 @@ var util = require('util');
 var EE = require('events').EventEmitter;
 var cheerio = require('cheerio');
 var robots = require('robots');
-var parseDomain = require("parse-domain");
+var parseDomain = require('parse-domain');
 
 
 var Spyderino = function(options){
@@ -134,7 +134,8 @@ _.extend( Spyderino.prototype, {
 			var $ = cheerio.load(body);
 			var page = $;
 
-			this.emit('page', {url: finalUrl, body: body});
+			var canonicalUrl = $('link[rel="canonical"]').attr('href');
+			this.emit('page', {url: finalUrl, body: body, canonicalUrl: canonicalUrl, originalUrl: url});
 
 			this._beforeFilter($);
 
