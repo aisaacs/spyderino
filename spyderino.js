@@ -223,12 +223,17 @@ _.extend( Spyderino.prototype, {
 				keep = keep && this._baseUrlFilter(link);
 			}
 
+			if (this.options.constrainToPrimaryDomain) {
+				keep = keep && this._primaryDomainFilter(link);
+			}
 
 			if (this._robotsFilter) {
 				keep = keep && this._robotsFilter(url);
 			}
+
 			return keep;
 		}.bind(this));
+
 		return links;
 	},
 
@@ -247,17 +252,20 @@ _.extend( Spyderino.prototype, {
 		if (!url) return false;
 		var parsed = require('url').parse(url);
 
-		var result = true;
-
 		if (parsed.host && (parsed.host !== this.base)) {
-			result = result && false;
+			return false;
 		}
+
+		return true;
+	},
+
+	_primaryDomainFilter: function(url) {
+		if (!url) return false;
 
 		var parsedDomain = parseDomain(url);
 		parsedDomain = [parsedDomain.domain, parsedDomain.tld].join('.');
-		result = result && (parsedDomain === this._primaryDomain);
 
-		return result;
+		return (parsedDomain === this._primaryDomain);
 	},
 
 	_requestComplete: function(){
