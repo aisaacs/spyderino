@@ -146,7 +146,7 @@ _.extend( Spyderino.prototype, {
 				}
 			}
 
-			if (this.options.maxDepth && depth < this.options.maxDepth) {
+			if (!this.options.maxDepth || depth < this.options.maxDepth) {
 				//extract the links,
 				var links = this._extractLinks($, finalUrl);
 				links = this._filterLinks(links, finalUrl);
