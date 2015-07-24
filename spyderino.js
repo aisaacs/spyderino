@@ -5,6 +5,8 @@ var util = require('util');
 var EE = require('events').EventEmitter;
 var cheerio = require('cheerio');
 var robots = require('robots');
+var parseDomain = require("parse-domain");
+
 
 var Spyderino = function(options){
 
@@ -16,6 +18,7 @@ var Spyderino = function(options){
 		headers: {},
 		maxDepth: null,
 		constrainToDomain: true,
+		constrainToPrimaryDomain: true,
 		beforeFilter: null,
 		userAgent: 'Spyderino/0.1',
 
@@ -50,6 +53,9 @@ var Spyderino = function(options){
 		}.bind(this));
 	}
 	this.activeRequests = 0;
+
+	var parsedDomain = parseDomain(this.options.entryPoint);
+	this._primaryDomain = [parsedDomain.domain, parsedDomain.tld].join('.');
 };
 
 util.inherits(Spyderino, EE);
@@ -214,8 +220,9 @@ _.extend( Spyderino.prototype, {
 			}.bind(this));
 
 			if (this.options.constrainToDomain) {
-				keep = keep && this._baseFilter(link);
+				keep = keep && this._baseUrlFilter(link);
 			}
+
 
 			if (this._robotsFilter) {
 				keep = keep && this._robotsFilter(url);
@@ -235,16 +242,22 @@ _.extend( Spyderino.prototype, {
 		}.bind(this));
 	},
 
-	_baseFilter: function(url){
+	_baseUrlFilter: function(url){
 
 		if (!url) return false;
 		var parsed = require('url').parse(url);
 
+		var result = true;
+
 		if (parsed.host && (parsed.host !== this.base)) {
-			return false;
+			result = result && false;
 		}
 
-		return true;
+		var parsedDomain = parseDomain(url);
+		parsedDomain = [parsedDomain.domain, parsedDomain.tld].join('.');
+		result = result && (parsedDomain === this._primaryDomain);
+
+		return result;
 	},
 
 	_requestComplete: function(){
