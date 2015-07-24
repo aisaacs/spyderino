@@ -135,7 +135,13 @@ _.extend( Spyderino.prototype, {
 			var page = $;
 
 			var canonicalUrl = $('link[rel="canonical"]').attr('href');
-			this.emit('page', {url: finalUrl, body: body, canonicalUrl: canonicalUrl, originalUrl: url});
+			this.emit('page', {
+				url: finalUrl,
+				body: body,
+				canonicalUrl: canonicalUrl,
+				originalUrl: url,
+				responseHeaders: resp.headers
+			});
 
 			this._beforeFilter($);
 
@@ -146,7 +152,9 @@ _.extend( Spyderino.prototype, {
 				}
 			}
 
-			if (!this.options.maxDepth || depth < this.options.maxDepth) {
+			if (typeof this.options.maxDepth === 'undefined' ||
+				this.options.maxDepth === null ||
+				depth < this.options.maxDepth) {
 				//extract the links,
 				var links = this._extractLinks($, finalUrl);
 				links = this._filterLinks(links, finalUrl);
